@@ -1,16 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/router.dart';
 import '../../services/app_controller.dart';
 import '../../services/call_models.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.controller});
 
   final AppController controller;
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final TextEditingController _joinController = TextEditingController();
+
+  @override
+  void dispose() {
+    _joinController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final phase = controller.phase;
 
     return Scaffold(
@@ -23,7 +38,8 @@ class HomeScreen extends StatelessWidget {
             hint: 'Adjust contrast, caption size, and speech settings',
             child: IconButton(
               tooltip: 'Settings',
-              onPressed: () => Navigator.of(context).pushNamed(UniCallRoutes.settings),
+              onPressed: () =>
+                  Navigator.of(context).pushNamed(UniCallRoutes.settings),
               icon: const Icon(Icons.settings),
             ),
           ),
@@ -34,12 +50,12 @@ class HomeScreen extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           children: [
             Text(
-              'Accessibility-first calling prototype',
+              'Realtime accessible calling (MVP)',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             Text(
-              'This build simulates call states, live captions, chat, and announcements so you can test UI/UX.',
+              'Create a call code on Device A, then join it on Device B.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -47,43 +63,118 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: phase == CallPhase.idle
-                  ? () {
-                      controller.startOutgoingCall(remoteName: 'Alex');
-                      Navigator.of(context).pushNamed(UniCallRoutes.inCall);
-                    }
+                  ? () => _createCall(context)
                   : null,
-              icon: const Icon(Icons.call),
-              label: const Text('Start simulated call'),
+              icon: const Icon(Icons.add_call),
+              label: const Text('Create call'),
             ),
             const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: phase == CallPhase.idle
-                  ? () {
-                      controller.simulateIncomingCall(remoteName: 'Alex');
-                      Navigator.of(context).pushNamed(UniCallRoutes.incoming);
-                    }
-                  : null,
-              icon: const Icon(Icons.ring_volume),
-              label: const Text('Simulate incoming call'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Join call',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _joinController,
+                      decoration: const InputDecoration(
+                        labelText: 'Call code',
+                        hintText: 'Paste callId from the other device',
+                      ),
+                      textInputAction: TextInputAction.go,
+                      onSubmitted: (_) => _joinCall(context),
+                    ),
+                    const SizedBox(height: 10),
+                    FilledButton.icon(
+                      onPressed: phase == CallPhase.idle
+                          ? () => _joinCall(context)
+                          : null,
+                      icon: const Icon(Icons.call),
+                      label: const Text('Join'),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: phase != CallPhase.idle
-                  ? () {
-                      controller.endCall();
-                      controller.resetToIdle();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Reset to idle')),
-                      );
-                    }
-                  : null,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reset'),
-            ),
+            if (!controller.sttReady)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'Offline captions not ready yet. Add a sherpa streaming model under assets/models/sherpa_streaming/.\n\nError: ${controller.sttError ?? 'Unknown'}',
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _createCall(BuildContext context) async {
+    final callId = DateTime.now().millisecondsSinceEpoch.toString();
+    await Clipboard.setData(ClipboardData(text: callId));
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Call code created'),
+          content: SelectableText(
+            callId,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: callId));
+                if (context.mounted) Navigator.of(context).pop();
+              },
+              child: const Text('Copy'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                try {
+                  await widget.controller.startOutgoingCallRealtime(
+                    callId: callId,
+                  );
+                  if (!context.mounted) return;
+                  Navigator.of(context).pushNamed(UniCallRoutes.inCall);
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to start call: $e')),
+                  );
+                }
+              },
+              child: const Text('Start call'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _joinCall(BuildContext context) async {
+    final callId = _joinController.text.trim();
+    if (callId.isEmpty) return;
+    try {
+      await widget.controller.joinCallRealtime(callId: callId);
+      if (!context.mounted) return;
+      Navigator.of(context).pushNamed(UniCallRoutes.inCall);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to join call: $e')));
+    }
   }
 }
 
@@ -118,7 +209,10 @@ class _StatusCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Current state', style: Theme.of(context).textTheme.labelLarge),
+                  Text(
+                    'Current state',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
                   const SizedBox(height: 4),
                   Text(label, style: Theme.of(context).textTheme.titleMedium),
                   if (phase != CallPhase.idle) ...[
@@ -137,4 +231,3 @@ class _StatusCard extends StatelessWidget {
     );
   }
 }
-

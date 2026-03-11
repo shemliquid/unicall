@@ -28,7 +28,9 @@ class SettingsScreen extends StatelessWidget {
                 value: s.highContrast,
                 onChanged: s.setHighContrast,
                 title: const Text('High contrast'),
-                subtitle: const Text('Use a higher-contrast theme for readability.'),
+                subtitle: const Text(
+                  'Use a higher-contrast theme for readability.',
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -64,7 +66,9 @@ class SettingsScreen extends StatelessWidget {
                 value: s.ttsEnabled,
                 onChanged: s.setTtsEnabled,
                 title: const Text('Text-to-speech'),
-                subtitle: const Text('Speak typed messages and system announcements.'),
+                subtitle: const Text(
+                  'Speak typed messages and system announcements.',
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -143,4 +147,3 @@ class _SliderTile extends StatelessWidget {
     );
   }
 }
-

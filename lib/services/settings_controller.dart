@@ -45,4 +45,3 @@ final class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 }
-

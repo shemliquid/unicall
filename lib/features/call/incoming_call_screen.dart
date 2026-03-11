@@ -16,10 +16,9 @@ class IncomingCallScreen extends StatelessWidget {
       // If we navigated here at the wrong time, send users to the right place.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!context.mounted) return;
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          UniCallRoutes.home,
-          (r) => false,
-        );
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(UniCallRoutes.home, (r) => false);
       });
     }
 
@@ -33,7 +32,11 @@ class IncomingCallScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.call, size: 64, color: Theme.of(context).colorScheme.primary),
+                  Icon(
+                    Icons.call,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(height: 12),
                   Text(
                     'Incoming call',
@@ -74,9 +77,9 @@ class IncomingCallScreen extends StatelessWidget {
                         child: FilledButton.icon(
                           onPressed: () {
                             controller.answerIncoming();
-                            Navigator.of(context).pushReplacementNamed(
-                              UniCallRoutes.inCall,
-                            );
+                            Navigator.of(
+                              context,
+                            ).pushReplacementNamed(UniCallRoutes.inCall);
                           },
                           icon: const Icon(Icons.call),
                           label: const Text('Answer'),
@@ -99,4 +102,3 @@ class IncomingCallScreen extends StatelessWidget {
     );
   }
 }
-

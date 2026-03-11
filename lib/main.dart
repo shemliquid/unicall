@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'app/router.dart';
 import 'app/theme.dart';
 import 'services/app_controller.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {
+    // Firebase may be intentionally unconfigured during early setup.
+    // The app can still run for UI testing and will show errors when trying to call.
+  }
   runApp(const UniCallApp());
 }
 
@@ -41,8 +49,9 @@ class _UniCallAppState extends State<UniCallApp> {
           debugShowCheckedModeBanner: false,
           theme: UniCallTheme.light(controller.settings),
           darkTheme: UniCallTheme.dark(controller.settings),
-          themeMode:
-              controller.settings.highContrast ? ThemeMode.dark : ThemeMode.light,
+          themeMode: controller.settings.highContrast
+              ? ThemeMode.dark
+              : ThemeMode.light,
           onGenerateRoute: (settings) =>
               UniCallRouter.onGenerateRoute(settings, controller),
         );

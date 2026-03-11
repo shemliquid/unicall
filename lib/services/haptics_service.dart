@@ -19,4 +19,3 @@ final class HapticsService {
     await Vibration.vibrate(pattern: [0, 120, 80, 120]);
   }
 }
-

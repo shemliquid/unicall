@@ -38,13 +38,13 @@ final class UniCallTheme {
     final textTheme = base.textTheme;
 
     // Caption text needs to remain readable even with large scaling.
-    final captionStyle = (textTheme.titleLarge ?? const TextStyle())
-        .copyWith(fontWeight: FontWeight.w700, height: 1.25);
+    final captionStyle = (textTheme.titleLarge ?? const TextStyle()).copyWith(
+      fontWeight: FontWeight.w700,
+      height: 1.25,
+    );
 
     return base.copyWith(
-      textTheme: textTheme.copyWith(
-        titleLarge: captionStyle,
-      ),
+      textTheme: textTheme.copyWith(titleLarge: captionStyle),
       dividerTheme: DividerThemeData(
         color: scheme.outlineVariant.withValues(alpha: 0.6),
         thickness: 1,
@@ -61,4 +61,3 @@ final class UniCallTheme {
     );
   }
 }
-

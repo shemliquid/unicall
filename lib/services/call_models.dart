@@ -8,13 +8,7 @@ enum CallPhase {
   failed,
 }
 
-enum CallEndReason {
-  localHangup,
-  remoteHangup,
-  rejected,
-  missed,
-  error,
-}
+enum CallEndReason { localHangup, remoteHangup, rejected, missed, error }
 
 final class CaptionLine {
   CaptionLine({
@@ -55,4 +49,3 @@ final class ChatMessage {
     );
   }
 }
-

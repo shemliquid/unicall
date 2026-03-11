@@ -30,7 +30,9 @@ class _InCallScreenState extends State<InCallScreen> {
     if (phase == CallPhase.ended || phase == CallPhase.idle) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!context.mounted) return;
-        Navigator.of(context).pushNamedAndRemoveUntil(UniCallRoutes.home, (r) => false);
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(UniCallRoutes.home, (r) => false);
       });
     }
 
@@ -40,19 +42,24 @@ class _InCallScreenState extends State<InCallScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(phase == CallPhase.connecting ? 'Connecting…' : c.remoteName),
+        title: Text(
+          phase == CallPhase.connecting ? 'Connecting…' : c.remoteName,
+        ),
         leading: IconButton(
           tooltip: 'Back',
           onPressed: () {
             c.endCall();
-            Navigator.of(context).pushNamedAndRemoveUntil(UniCallRoutes.home, (r) => false);
+            Navigator.of(
+              context,
+            ).pushNamedAndRemoveUntil(UniCallRoutes.home, (r) => false);
           },
           icon: const Icon(Icons.arrow_back),
         ),
         actions: [
           IconButton(
             tooltip: 'Settings',
-            onPressed: () => Navigator.of(context).pushNamed(UniCallRoutes.settings),
+            onPressed: () =>
+                Navigator.of(context).pushNamed(UniCallRoutes.settings),
             icon: const Icon(Icons.tune),
           ),
         ],
@@ -65,6 +72,13 @@ class _InCallScreenState extends State<InCallScreen> {
               final isNarrow = constraints.maxWidth < 900;
               return Column(
                 children: [
+                  if (!c.sttReady)
+                    MaterialBanner(
+                      content: Text(
+                        'Offline captions not configured. Add model files under assets/models/sherpa_streaming/.',
+                      ),
+                      actions: const [SizedBox.shrink()],
+                    ),
                   Expanded(
                     child: isNarrow
                         ? Column(
@@ -194,15 +208,16 @@ class _CaptionsPanel extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final line = captions[index];
                       final style = theme.textTheme.titleLarge?.copyWith(
-                        fontSize: (theme.textTheme.titleLarge?.fontSize ?? 20) * scale,
-                        color: line.isPartial ? cs.onSurfaceVariant : cs.onSurface,
+                        fontSize:
+                            (theme.textTheme.titleLarge?.fontSize ?? 20) *
+                            scale,
+                        color: line.isPartial
+                            ? cs.onSurfaceVariant
+                            : cs.onSurface,
                       );
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
-                        child: Text(
-                          _formatCaption(line),
-                          style: style,
-                        ),
+                        child: Text(_formatCaption(line), style: style),
                       );
                     },
                   )
@@ -246,10 +261,7 @@ class _ChatPanel extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Text(
-            'Text',
-            style: theme.textTheme.titleMedium,
-          ),
+          child: Text('Text', style: theme.textTheme.titleMedium),
         ),
         const Divider(height: 1),
         Expanded(
@@ -262,7 +274,9 @@ class _ChatPanel extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Padding(
@@ -297,7 +311,8 @@ class _ChatPanel extends StatelessWidget {
                   onSubmitted: (value) => onSend(value),
                   decoration: const InputDecoration(
                     labelText: 'Type a message',
-                    hintText: 'Will be spoken aloud when TTS is enabled (later)',
+                    hintText:
+                        'Will be spoken aloud when TTS is enabled (later)',
                   ),
                 ),
               ),
@@ -358,7 +373,9 @@ class _ActionBar extends StatelessWidget {
           ),
           Semantics(
             button: true,
-            label: controller.settings.captionsEnabled ? 'Turn captions off' : 'Turn captions on',
+            label: controller.settings.captionsEnabled
+                ? 'Turn captions off'
+                : 'Turn captions on',
             hint: 'Shows or hides live captions',
             toggled: controller.settings.captionsEnabled,
             child: FilledButton.tonalIcon(
@@ -371,23 +388,31 @@ class _ActionBar extends StatelessWidget {
                     : Icons.closed_caption_disabled,
               ),
               label: Text(
-                controller.settings.captionsEnabled ? 'Captions on' : 'Captions off',
+                controller.settings.captionsEnabled
+                    ? 'Captions on'
+                    : 'Captions off',
               ),
             ),
           ),
           Semantics(
             button: true,
-            label: controller.settings.ttsEnabled ? 'Turn text to speech off' : 'Turn text to speech on',
+            label: controller.settings.ttsEnabled
+                ? 'Turn text to speech off'
+                : 'Turn text to speech on',
             hint: 'Speaks typed messages and announcements',
             toggled: controller.settings.ttsEnabled,
             child: FilledButton.tonalIcon(
-              onPressed: () => controller.settings.setTtsEnabled(!controller.settings.ttsEnabled),
+              onPressed: () => controller.settings.setTtsEnabled(
+                !controller.settings.ttsEnabled,
+              ),
               icon: Icon(
                 controller.settings.ttsEnabled
                     ? Icons.record_voice_over
                     : Icons.voice_over_off,
               ),
-              label: Text(controller.settings.ttsEnabled ? 'TTS on' : 'TTS off'),
+              label: Text(
+                controller.settings.ttsEnabled ? 'TTS on' : 'TTS off',
+              ),
             ),
           ),
           Semantics(
@@ -412,7 +437,9 @@ class _ActionBar extends StatelessWidget {
               style: FilledButton.styleFrom(backgroundColor: cs.error),
               onPressed: () {
                 controller.endCall();
-                Navigator.of(context).pushNamedAndRemoveUntil(UniCallRoutes.home, (r) => false);
+                Navigator.of(
+                  context,
+                ).pushNamedAndRemoveUntil(UniCallRoutes.home, (r) => false);
               },
               icon: const Icon(Icons.call_end),
               label: const Text('End'),
@@ -423,4 +450,3 @@ class _ActionBar extends StatelessWidget {
     );
   }
 }
-

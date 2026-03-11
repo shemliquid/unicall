@@ -3,22 +3,42 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'call_models.dart';
 import 'haptics_service.dart';
+import 'signaling/firebase_signaling.dart';
+import 'stt/caption_engine_sherpa.dart';
+import 'stt/sherpa_model_loader.dart';
 import 'settings_controller.dart';
 import 'tts_service.dart';
+import 'webrtc/call_engine_webrtc.dart';
 
 final class AppController extends ChangeNotifier {
   AppController() {
-    settings.addListener(notifyListeners);
+    _lastCaptionsEnabled = settings.captionsEnabled;
+    _lastTtsEnabled = settings.ttsEnabled;
+    settings.addListener(_onSettingsChanged);
     _tts = TtsService(settings);
     _haptics = HapticsService();
+    _signaling = FirebaseSignaling();
+    _webrtc = WebRtcCallEngine(signaling: _signaling, selfId: _selfId);
   }
 
   final SettingsController settings = SettingsController();
   late final TtsService _tts;
   late final HapticsService _haptics;
+  late final FirebaseSignaling _signaling;
+  late final WebRtcCallEngine _webrtc;
+  final String _selfId = DateTime.now().microsecondsSinceEpoch.toString();
+  CaptionEngineSherpa? _stt;
+  final SherpaModelLoader _sherpaLoader = SherpaModelLoader();
+  bool _sttReady = false;
+  String? _sttError;
+  bool get sttReady => _sttReady;
+  String? get sttError => _sttError;
+  late bool _lastCaptionsEnabled;
+  late bool _lastTtsEnabled;
 
   CallPhase _phase = CallPhase.idle;
   CallPhase get phase => _phase;
@@ -31,6 +51,9 @@ final class AppController extends ChangeNotifier {
 
   String _remoteName = 'Alex';
   String get remoteName => _remoteName;
+
+  String? _activeCallId;
+  String? get activeCallId => _activeCallId;
 
   CallEndReason? _endReason;
   CallEndReason? get endReason => _endReason;
@@ -46,41 +69,75 @@ final class AppController extends ChangeNotifier {
 
   Future<void> init() async {
     await _tts.init();
+    await _initStt();
   }
 
-  void startOutgoingCall({String remoteName = 'Alex'}) {
+  Future<void> _initStt() async {
+    try {
+      final engine = CaptionEngineSherpa(
+        onCaption: (line) {
+          _captions.add(line);
+          if (_captions.length > 120) {
+            _captions.removeRange(0, _captions.length - 120);
+          }
+          notifyListeners();
+        },
+        speakerLabel: () => 'You',
+      );
+
+      final model = await _sherpaLoader.loadStreamingZipformer();
+      await engine.init(model: model);
+      _stt = engine;
+      _sttReady = true;
+      _sttError = null;
+      notifyListeners();
+    } catch (e) {
+      _sttReady = false;
+      _sttError = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> startOutgoingCallRealtime({
+    required String callId,
+    String remoteName = 'Alex',
+  }) async {
+    await _ensureMicrophonePermission();
     _remoteName = remoteName;
+    _activeCallId = callId;
     _endReason = null;
     _muted = false;
     _speakerOn = true;
     _captions.clear();
     _messages.clear();
-    _setPhase(CallPhase.outgoingDialing);
-
-    _ticker?.cancel();
-    _ticker = Timer(const Duration(seconds: 2), () {
-      _setPhase(CallPhase.connecting);
-      _ticker = Timer(const Duration(seconds: 1), () {
-        _setPhase(CallPhase.inCall);
-        unawaited(_haptics.connected());
-        unawaited(SystemSound.play(SystemSoundType.click));
-        unawaited(_tts.speak('Call connected'));
-        _startMockCaptionStream();
-      });
-    });
+    _setPhase(CallPhase.connecting);
+    await _webrtc.startCall(callId: callId);
+    _setPhase(CallPhase.inCall);
+    unawaited(_haptics.connected());
+    unawaited(SystemSound.play(SystemSoundType.click));
+    unawaited(_tts.speak('Call connected'));
+    unawaited(_startCaptions());
   }
 
-  void simulateIncomingCall({String remoteName = 'Alex'}) {
+  Future<void> joinCallRealtime({
+    required String callId,
+    String remoteName = 'Alex',
+  }) async {
+    await _ensureMicrophonePermission();
     _remoteName = remoteName;
+    _activeCallId = callId;
     _endReason = null;
     _muted = false;
     _speakerOn = true;
     _captions.clear();
     _messages.clear();
-    _setPhase(CallPhase.incomingRinging);
-    unawaited(_haptics.incomingCall());
-    unawaited(SystemSound.play(SystemSoundType.alert));
-    unawaited(_tts.speak('Incoming call from $_remoteName'));
+    _setPhase(CallPhase.connecting);
+    await _webrtc.joinCall(callId: callId);
+    _setPhase(CallPhase.inCall);
+    unawaited(_haptics.connected());
+    unawaited(SystemSound.play(SystemSoundType.click));
+    unawaited(_tts.speak('Call connected'));
+    unawaited(_startCaptions());
   }
 
   void answerIncoming() {
@@ -110,7 +167,8 @@ final class AppController extends ChangeNotifier {
     if (_phase == CallPhase.idle || _phase == CallPhase.ended) return;
     _endReason = reason;
     _setPhase(CallPhase.ended);
-    _stopMockCaptionStream();
+    unawaited(_stopCaptions());
+    unawaited(_webrtc.hangup());
     unawaited(_haptics.ended());
     unawaited(SystemSound.play(SystemSoundType.alert));
     unawaited(_tts.speak('Call ended'));
@@ -118,6 +176,7 @@ final class AppController extends ChangeNotifier {
 
   void resetToIdle() {
     _endReason = null;
+    _activeCallId = null;
     _captions.clear();
     _messages.clear();
     _setPhase(CallPhase.idle);
@@ -128,6 +187,7 @@ final class AppController extends ChangeNotifier {
     notifyListeners();
     unawaited(SystemSound.play(SystemSoundType.click));
     unawaited(_tts.speak(_muted ? 'Microphone muted' : 'Microphone unmuted'));
+    unawaited(_webrtc.setMuted(_muted));
   }
 
   void toggleSpeaker() {
@@ -153,8 +213,7 @@ final class AppController extends ChangeNotifier {
     unawaited(_tts.speak(trimmed));
   }
 
-  ChatMessage? get lastMessage =>
-      _messages.isEmpty ? null : _messages.last;
+  ChatMessage? get lastMessage => _messages.isEmpty ? null : _messages.last;
 
   String? get lastMessageText => lastMessage?.text;
 
@@ -168,6 +227,31 @@ final class AppController extends ChangeNotifier {
     if (next == _phase) return;
     _phase = next;
     notifyListeners();
+  }
+
+  Future<void> _ensureMicrophonePermission() async {
+    final status = await Permission.microphone.request();
+    if (!status.isGranted) {
+      throw StateError('Microphone permission is required for calling');
+    }
+  }
+
+  Future<void> _startCaptions() async {
+    if (!settings.captionsEnabled) return;
+    if (_phase != CallPhase.inCall) return;
+    // Prefer real STT; fall back to mock if not configured.
+    if (_sttReady && _stt != null) {
+      await _stt!.start();
+      return;
+    }
+    _startMockCaptionStream();
+  }
+
+  Future<void> _stopCaptions() async {
+    _stopMockCaptionStream();
+    if (_stt != null) {
+      await _stt!.stop();
+    }
   }
 
   void _startMockCaptionStream() {
@@ -230,13 +314,36 @@ final class AppController extends ChangeNotifier {
     return '${full.substring(0, cut)}…';
   }
 
+  void _onSettingsChanged() {
+    final captionsEnabled = settings.captionsEnabled;
+    if (captionsEnabled != _lastCaptionsEnabled) {
+      _lastCaptionsEnabled = captionsEnabled;
+      if (captionsEnabled) {
+        unawaited(_startCaptions());
+      } else {
+        unawaited(_stopCaptions());
+      }
+    }
+
+    final ttsEnabled = settings.ttsEnabled;
+    if (ttsEnabled != _lastTtsEnabled) {
+      _lastTtsEnabled = ttsEnabled;
+      if (!ttsEnabled) {
+        unawaited(_tts.stop());
+      }
+    }
+
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _ticker?.cancel();
-    settings.removeListener(notifyListeners);
+    settings.removeListener(_onSettingsChanged);
     settings.dispose();
     unawaited(_tts.stop());
+    unawaited(_webrtc.dispose());
+    unawaited(_stt?.dispose());
     super.dispose();
   }
 }
-
